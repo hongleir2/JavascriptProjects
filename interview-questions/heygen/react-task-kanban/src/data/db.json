@@ -1,0 +1,36 @@
+{
+  "tasks": [
+    {
+      "title": "设计登录页面",
+      "description": "创建用户登录界面",
+      "id": "1"
+    },
+    {
+      "id": "2",
+      "title": "实现认证功能",
+      "description": "使用 JWT 实现用户认证"
+    },
+    {
+      "id": "3",
+      "title": "搭建数据库",
+      "description": "选择并配置数据库系统"
+    },
+    {
+      "id": "4",
+      "title": "撰写 API 文档",
+      "description": "详细记录 API 接口"
+    },
+    {
+      "id": "5",
+      "title": "前端测试",
+      "description": "编写单元测试和集成测试"
+    }
+  ],
+  "current_sprint": [
+    {
+      "id": "1",
+      "title": "设计登录页面",
+      "description": "创建用户登录界面"
+    }
+  ]
+}
