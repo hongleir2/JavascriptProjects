@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Stream Demo</title>
+
+  <!--
+    ============================================================
+    外部依赖说明（全部通过 CDN 加载）：
+    1. marked.js   —— Markdown 文本 → HTML 的解析器
+    2. highlight.js —— 代码语法高亮引擎 + github 主题样式
+    3. DOMPurify    —— HTML 消毒库，防止 XSS（跨站脚本攻击）
+    ============================================================
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github.min.css" />
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 20px;
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fafafa;
+      color: #333;
+    }
+
+    h1 {
+      margin-bottom: 16px;
+      font-size: 1.5rem;
+    }
+
+    .input-area {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    textarea {
+      flex: 1;
+      min-height: 60px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 14px;
+      resize: vertical;
+      font-family: inherit;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #0af;
+    }
+
+    button#send-btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      background: #0070f3;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+      align-self: flex-end;
+    }
+
+    button#send-btn:hover { background: #005bd4; }
+    button#send-btn:disabled { background: #aaa; cursor: not-allowed; }
+
+    #chat {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .message {
+      padding: 12px 16px;
+      border-radius: 10px;
+      word-break: break-word;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    .user {
+      background: #dcebff;
+      align-self: flex-end;
+      max-width: 85%;
+      white-space: pre-wrap;
+    }
+
+    .assistant {
+      background: #f0f0f0;
+      align-self: flex-start;
+      max-width: 85%;
+    }
+
+    /* 学习点：streaming 类在流式输出期间显示蓝色边框，表示"正在生成" */
+    .assistant.streaming {
+      border: 1px solid #0af;
+    }
+
+    .hint {
+      color: #999;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    /* ── Markdown 渲染后的内容样式 ── */
+    .assistant p { margin: 0.5em 0; }
+    .assistant p:first-child { margin-top: 0; }
+    .assistant p:last-child { margin-bottom: 0; }
+    .assistant ul, .assistant ol { margin: 0.5em 0; padding-left: 1.5em; }
+    .assistant h1, .assistant h2, .assistant h3 { margin: 0.8em 0 0.4em; }
+    .assistant h1 { font-size: 1.3em; }
+    .assistant h2 { font-size: 1.15em; }
+    .assistant h3 { font-size: 1.05em; }
+    .assistant blockquote {
+      border-left: 3px solid #ccc;
+      padding-left: 12px;
+      color: #666;
+      margin: 0.5em 0;
+    }
+    .assistant table {
+      border-collapse: collapse;
+      margin: 0.5em 0;
+    }
+    .assistant th, .assistant td {
+      border: 1px solid #ccc;
+      padding: 4px 8px;
+      font-size: 13px;
+    }
+    .assistant th { background: #e8e8e8; }
+
+    /* ── 代码块容器：语言标签 + 复制按钮 + 高亮代码 ── */
+    .code-block-wrapper {
+      position: relative;
+      margin: 0.5em 0;
+    }
+
+    .code-block-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #e0e0e0;
+      padding: 4px 12px;
+      border-radius: 8px 8px 0 0;
+      font-size: 12px;
+      color: #555;
+    }
+
+    .copy-btn {
+      background: none;
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      color: #555;
+    }
+    .copy-btn:hover { background: #d0d0d0; }
+
+    .code-block-wrapper pre {
+      margin: 0 !important;
+      border-radius: 0 0 8px 8px !important;
+    }
+
+    /* 行内代码样式（不在 <pre> 里的 <code>） */
+    .assistant code:not(.hljs) {
+      background: #e4e4e4;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    .assistant pre {
+      background: #f6f6f6;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 12px;
+      overflow-x: auto;
+    }
+
+    .assistant pre code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+      font-size: 13px;
+    }
+
+    /* ── 整条消息的复制按钮（hover 时显示） ── */
+    .message-wrapper {
+      position: relative;
+      align-self: flex-start;
+      max-width: 85%;
+    }
+
+    .message-wrapper .msg-copy-btn {
+      display: none;
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(255,255,255,0.85);
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      color: #555;
+    }
+
+    .message-wrapper:hover .msg-copy-btn {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>AI 流式对话 Demo</h1>
+
+  <div class="input-area">
+    <textarea id="prompt" placeholder="随便问点什么…" rows="2"></textarea>
+    <button id="send-btn">发送</button>
+  </div>
+  <p class="hint">Ctrl/Cmd + Enter 发送</p>
+
+  <!-- 聊天消息容器：所有用户消息和 AI 回复都动态插入这里 -->
+  <div id="chat"></div>
+
+  <script>
+    // ================================================================
+    // 一、配置 marked.js
+    // ================================================================
+    // 学习点：marked.setOptions() 全局配置 Markdown 解析行为
+    //   - highlight: 自定义代码高亮函数，这里集成 highlight.js
+    //   - breaks: true 让单个换行也变成 <br>（类似 GitHub 风格）
+    marked.setOptions({
+      highlight(code, lang) {
+        // 如果指定了语言且 hljs 支持，就用指定语言高亮
+        if (lang && hljs.getLanguage(lang)) {
+          return hljs.highlight(code, { language: lang }).value;
+        }
+        // 否则让 hljs 自动检测语言
+        return hljs.highlightAuto(code).value;
+      },
+      breaks: true,
+    });
+
+    // ================================================================
+    // 二、DOMPurify 白名单配置
+    // ================================================================
+    // 学习点：DOMPurify 默认会移除所有"危险"标签（如 <script>、<iframe>）
+    // 这里显式声明允许的标签和属性，确保 Markdown 渲染的 HTML 能正常显示
+    // 同时阻止任何潜在的 XSS 攻击内容
+    const purifyConfig = {
+      ALLOWED_TAGS: [
+        'p', 'br', 'strong', 'em', 'del', 'code', 'pre', 'blockquote',
+        'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+        'div', 'span', 'button', 'hr',
+      ],
+      ALLOWED_ATTR: ['class', 'href', 'target', 'rel'],
+    };
+
+    // ================================================================
+    // 三、DOM 元素引用 & 状态管理
+    // ================================================================
+    const promptEl = document.getElementById('prompt');
+    const sendBtn = document.getElementById('send-btn');
+    const chatEl = document.getElementById('chat');
+
+    // 学习点：对话历史数组 —— 每次请求都带上完整历史，让 AI 具备多轮对话能力
+    // OpenAI 的模型本身是无状态的，"记忆"全靠客户端把历史消息一并发过去
+    const conversationHistory = [
+      { role: 'system', content: 'You are a helpful assistant.' },
+    ];
+
+    // 学习点：AbortController 用于中断正在进行的 fetch 请求
+    // 比如用户在 AI 还没回完时就发了新问题，需要取消上一次请求
+    let abortController = null;
+
+    // ================================================================
+    // 四、Markdown 渲染 & 安全处理
+    // ================================================================
+
+    /**
+     * 把原始 Markdown 文本渲染成安全的 HTML
+     * 流程：Markdown → marked 解析 → 代码块包装（加语言标签+复制按钮）→ DOMPurify 消毒
+     */
+    function renderMarkdown(md) {
+      // 第一步：marked 把 Markdown 转成 HTML
+      // 学习点：marked.parse() 是同步的，返回 HTML 字符串
+      let html = marked.parse(md);
+
+      // 第二步：用正则找到代码块，包上带复制按钮的容器
+      // 学习点：marked 生成的代码块格式是 <pre><code class="language-xxx">...</code></pre>
+      // 我们用正则匹配后，在外面包一层 .code-block-wrapper
+
+      // 有语言标记的代码块（如 ```javascript）
+      html = html.replace(
+        /<pre><code class="language-(\w+)">([\s\S]*?)<\/code><\/pre>/g,
+        (_, lang, code) => {
+          return `<div class="code-block-wrapper">
+            <div class="code-block-header">
+              <span>${lang}</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code class="hljs language-${lang}">${code}</code></pre>
+          </div>`;
+        }
+      );
+
+      // 没有语言标记的代码块（如 ```\n...```）
+      html = html.replace(
+        /<pre><code>([\s\S]*?)<\/code><\/pre>/g,
+        (_, code) => {
+          return `<div class="code-block-wrapper">
+            <div class="code-block-header">
+              <span>code</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+            <pre><code class="hljs">${code}</code></pre>
+          </div>`;
+        }
+      );
+
+      // 第三步：DOMPurify 消毒 —— 移除白名单以外的所有标签和属性
+      // 学习点：即使 Markdown 来自 AI，也不能信任！AI 有可能被 prompt injection
+      // 攻击，返回带 <script> 的内容。DOMPurify 是最后一道防线
+      return DOMPurify.sanitize(html, purifyConfig);
+    }
+
+    /**
+     * 安全地把 HTML 字符串插入 DOM
+     * 学习点：虽然已经过 DOMPurify 消毒，我们仍然用 <template> 元素来解析 HTML，
+     * 而不是直接 el.innerHTML = html。<template> 的 content 是一个 DocumentFragment，
+     * 浏览器不会在解析时执行其中的脚本
+     */
+    function safeSetHTML(el, html) {
+      el.textContent = '';  // 先清空现有内容
+      const template = document.createElement('template');
+      template.innerHTML = html;
+      el.appendChild(template.content);
+    }
+
+    /**
+     * 给代码块里的复制按钮绑定点击事件
+     * 学习点：为什么不在渲染时就用 onclick=""？
+     * 因为流式阶段 DOM 会被反复重建（safeSetHTML 会先清空再重建），
+     * 所以只在最终渲染后统一绑定一次事件
+     */
+    function bindCopyButtons(container) {
+      container.querySelectorAll('.code-block-wrapper .copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          // 学习点：navigator.clipboard.writeText() 是现代浏览器提供的剪贴板 API
+          // 比老式的 document.execCommand('copy') 更安全，返回 Promise
+          const code = btn.closest('.code-block-wrapper').querySelector('code');
+          navigator.clipboard.writeText(code.textContent).then(() => {
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+          });
+        });
+      });
+    }
+
+    // ================================================================
+    // 五、消息 UI 组件
+    // ================================================================
+
+    /** 添加用户消息气泡 */
+    function appendUserMessage(text) {
+      const div = document.createElement('div');
+      div.className = 'message user';
+      div.textContent = text;  // textContent 自动转义，防止 XSS
+      chatEl.appendChild(div);
+      chatEl.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    }
+
+    /**
+     * 创建 AI 助手消息容器（含复制按钮）
+     * 学习点：返回三个引用 —— wrapper（外层容器）、div（消息内容区）、copyBtn（复制按钮）
+     * 这样后续可以分别操作它们
+     */
+    function createAssistantMessage() {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'message-wrapper';
+
+      const div = document.createElement('div');
+      div.className = 'message assistant streaming'; // streaming 类会加蓝色边框
+      wrapper.appendChild(div);
+
+      // 整条消息的复制按钮（hover 时显示）
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'msg-copy-btn';
+      copyBtn.textContent = 'Copy';
+      wrapper.appendChild(copyBtn);
+
+      chatEl.appendChild(wrapper);
+      return { wrapper, div, copyBtn };
+    }
+
+    // ================================================================
+    // 六、流式渲染节流
+    // ================================================================
+    // 学习点：OpenAI 每发一个 token 就会推送一个 SSE 事件，
+    // 如果每个 token 都触发 Markdown 解析 + DOM 更新，会非常卡。
+    // requestAnimationFrame 保证每帧最多渲染一次（约 60fps），
+    // 中间的 token 会被累积到 fullContent 里，下一帧统一渲染
+    let renderPending = false;
+
+    function scheduleRender(div, fullContent) {
+      if (renderPending) return; // 已经安排了渲染，跳过
+      renderPending = true;
+      requestAnimationFrame(() => {
+        const sanitized = renderMarkdown(fullContent);
+        safeSetHTML(div, sanitized);
+        chatEl.scrollIntoView({ block: 'end', behavior: 'smooth' });
+        renderPending = false;
+      });
+    }
+
+    // ================================================================
+    // 七、核心发送逻辑
+    // ================================================================
+
+    async function send() {
+      const content = promptEl.value.trim();
+      if (!content) return;
+
+      // 如果上一次请求还在进行中，先中断它
+      if (abortController) {
+        abortController.abort();
+        abortController = null;
+      }
+
+      // 展示用户消息 & 加入对话历史
+      appendUserMessage(content);
+      conversationHistory.push({ role: 'user', content });
+
+      // 创建空的 AI 消息容器
+      const { wrapper, div: assistantDiv, copyBtn } = createAssistantMessage();
+      promptEl.value = '';
+      sendBtn.disabled = true;
+
+      abortController = new AbortController();
+
+      try {
+        // ── 发起 fetch 请求到后端代理 ──
+        // 学习点：这里请求的是我们自己的 /chat 端点（不是直接请求 OpenAI），
+        // 后端会把请求转发给 OpenAI 并透传 SSE 流回来
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: conversationHistory }),
+          signal: abortController.signal, // 传入 signal 使请求可被中断
+        });
+
+        if (!response.ok || !response.body) {
+          assistantDiv.textContent = `请求失败：${response.status}`;
+          assistantDiv.classList.remove('streaming');
+          return;
+        }
+
+        // ── 流式读取响应体 ──
+        // 学习点：response.body 是一个 ReadableStream，
+        // getReader() 返回一个锁定的 reader，每次 read() 返回一小块数据
+        const reader = response.body.getReader();
+
+        // 学习点：TextDecoder 把 Uint8Array（二进制）转成 UTF-8 字符串
+        // { stream: true } 参数告诉 decoder "后面还有数据"，处理多字节字符被截断的情况
+        const decoder = new TextDecoder('utf-8');
+
+        let buffer = '';      // SSE 行缓冲区（处理不完整的行）
+        let fullContent = ''; // 累积的完整 AI 回复文本
+        let done = false;
+
+        while (!done) {
+          const result = await reader.read();
+          done = result.done;
+
+          if (result.value) {
+            buffer += decoder.decode(result.value, { stream: true });
+
+            // ── 解析 SSE 格式 ──
+            // 学习点：OpenAI 的流式响应格式是 SSE（Server-Sent Events）：
+            //   data: {"id":"...","choices":[{"delta":{"content":"你"},...}]}\n
+            //   data: {"id":"...","choices":[{"delta":{"content":"好"},...}]}\n
+            //   ...
+            //   data: [DONE]\n
+            //
+            // 每条消息以 "data: " 开头，消息之间用空行分隔
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // 最后一行可能不完整，留到下次处理
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              // 跳过空行和非 data: 开头的行
+              if (!trimmed || !trimmed.startsWith('data:')) continue;
+
+              const data = trimmed.slice('data:'.length).trim();
+
+              // data: [DONE] 表示流结束
+              if (data === '[DONE]') {
+                done = true;
+                break;
+              }
+
+              // 解析 JSON，提取 AI 回复的增量内容
+              try {
+                const json = JSON.parse(data);
+                // 学习点：流式响应中，每个 chunk 的新内容在 delta.content 里
+                // 非流式响应则是 message.content（完整内容）
+                const delta = json.choices?.[0]?.delta?.content;
+                if (delta) {
+                  fullContent += delta;
+                  // 用节流渲染更新 UI，避免过于频繁的 DOM 操作
+                  scheduleRender(assistantDiv, fullContent);
+                }
+              } catch (e) {
+                // 忽略无法解析的行（比如空的 data: 行）
+              }
+            }
+          }
+        }
+
+        // ── 流结束：最终渲染 & 绑定交互 ──
+        // 学习点：流式阶段的渲染是"近似"的（可能有未闭合的 Markdown），
+        // 流结束后做一次完整渲染，确保所有 Markdown 语法正确解析、代码高亮完整
+        const finalHTML = renderMarkdown(fullContent);
+        safeSetHTML(assistantDiv, finalHTML);
+        bindCopyButtons(assistantDiv);     // 给代码块的复制按钮绑事件
+        assistantDiv.classList.remove('streaming'); // 移除蓝色边框
+
+        // 绑定整条消息的复制按钮
+        // 学习点：这里复制的是原始 Markdown 文本（fullContent），而不是渲染后的 HTML
+        copyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(fullContent).then(() => {
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+          });
+        });
+
+        // 把 AI 的完整回复加入对话历史，供下一轮对话使用
+        if (fullContent) {
+          conversationHistory.push({ role: 'assistant', content: fullContent });
+        }
+      } catch (err) {
+        // 学习点：AbortError 是用户主动取消请求时触发的，不算真正的错误
+        if (err.name === 'AbortError') {
+          assistantDiv.textContent += '\n[已中断]';
+        } else {
+          assistantDiv.textContent += `\n[出错了：${err.message}]`;
+        }
+        assistantDiv.classList.remove('streaming');
+      } finally {
+        abortController = null;
+        sendBtn.disabled = false;
+      }
+    }
+
+    // ================================================================
+    // 八、事件绑定
+    // ================================================================
+    sendBtn.addEventListener('click', send);
+
+    // 学习点：Ctrl+Enter（Windows）/ Cmd+Enter（Mac）发送
+    // e.metaKey 是 Mac 的 Cmd 键，e.ctrlKey 是 Ctrl 键
+    promptEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault(); // 阻止默认的换行行为
+        send();
+      }
+    });
+  </script>
+</body>
+</html>

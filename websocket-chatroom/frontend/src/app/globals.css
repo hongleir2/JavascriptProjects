@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义全局样式 */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-chat-bg text-white antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* 自定义滚动条 */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-chat-sidebar rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-chat-accent/50 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-chat-accent;
+  }
+}
+
+@layer components {
+  /* 输入框样式 */
+  .input-base {
+    @apply w-full px-4 py-3 bg-chat-input border border-gray-700 rounded-lg 
+           text-white placeholder-gray-500
+           focus:outline-none focus:ring-2 focus:ring-chat-accent focus:border-transparent
+           transition-all duration-200;
+  }
+
+  /* 按钮基础样式 */
+  .btn-base {
+    @apply px-6 py-3 rounded-lg font-medium
+           transition-all duration-200 transform
+           disabled:opacity-50 disabled:cursor-not-allowed
+           active:scale-95;
+  }
+
+  /* 主按钮样式 */
+  .btn-primary {
+    @apply btn-base bg-chat-accent text-white
+           hover:bg-opacity-90 hover:shadow-lg hover:shadow-chat-accent/25;
+  }
+
+  /* 次要按钮样式 */
+  .btn-secondary {
+    @apply btn-base bg-chat-message text-white
+           hover:bg-opacity-80;
+  }
+
+  /* 卡片样式 */
+  .card {
+    @apply bg-chat-sidebar rounded-xl p-6 shadow-xl;
+  }
+
+  /* 消息气泡 */
+  .message-bubble {
+    @apply px-4 py-2 rounded-2xl max-w-[80%] break-words animate-slide-up;
+  }
+
+  .message-self {
+    @apply message-bubble bg-chat-accent text-white ml-auto rounded-br-md;
+  }
+
+  .message-other {
+    @apply message-bubble bg-chat-message text-white mr-auto rounded-bl-md;
+  }
+
+  .message-system {
+    @apply text-center text-gray-400 text-sm py-2 animate-fade-in;
+  }
+}
+
+@layer utilities {
+  /* 渐变背景 */
+  .gradient-bg {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  }
+
+  /* 玻璃态效果 */
+  .glass {
+    @apply bg-white/10 backdrop-blur-lg border border-white/20;
+  }
+
+  /* 文字渐变 */
+  .text-gradient {
+    @apply bg-gradient-to-r from-chat-accent to-pink-500 bg-clip-text text-transparent;
+  }
+
+  /* 脉冲动画 */
+  .pulse-dot {
+    @apply w-2 h-2 rounded-full bg-green-500 animate-pulse;
+  }
+}

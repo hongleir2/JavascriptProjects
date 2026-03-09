@@ -1,1 +1,7 @@
 .DS_Store
+.playwright-mcp
+**/node_modules
+**/venv
+**/webpack
+**/__pycache__/**
+**/.next/**
